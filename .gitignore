@@ -1,0 +1,79 @@
+# =============================================================================
+# Ở Đây Nè — .gitignore
+# =============================================================================
+
+# ---- Dependencies ----
+node_modules/
+
+# ---- Build output (rebuilt via `npm run build`) ----
+dist/
+*.tsbuildinfo
+
+# ---- SQLite database + runtime data (lives under backend/data) ----
+backend/data/db.sqlite
+backend/data/db.sqlite-shm
+backend/data/db.sqlite-wal
+backend/data/backups/
+backend/data/uploads/
+
+# Legacy data path (pre-restructure) — keep ignored so old DBs aren't committed
+server/data/
+
+# ---- Local runtime (logs, pid files, cloudflared scratch) ----
+_runtime/
+cloudflared
+cloudflared.exe
+*.log
+*.pid
+
+# ---- Cloudflare Tunnel runtime files (config, logs, credential JSON) ----
+# Keeps the tunnel UUID + any operator-side credentials out of the repo. The
+# credentials file usually lives under ~/.cloudflared/<uuid>.json but the
+# project-local config.yml references it and the .err/.out logs land here too.
+.cloudflared/
+
+# ---- Env / secrets (commit .env.example only) ----
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# ---- AI / agent tool folders + config (NOT project-related) ----
+.claude/
+.claude-*.md
+.cursor/
+.cursorrules
+.windsurf/
+.windsurfrules
+.aider*
+.continue/
+.codeium/
+.cody/
+.github/copilot-instructions.md
+.openclaw/
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+COPILOT.md
+.devcontainer/.agent*
+
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ---- Pipeline scratch + local config ----
+pipeline/out/*
+!pipeline/out/.gitkeep
+pipeline/config.json
+pipeline/_ingest/
+
+# ---- Local scratch ----
+_archive/
+tmp/
+.tmp/
+coverage/

@@ -1,0 +1,76 @@
+services:
+  web:
+    build: .
+    image: o-day-ne:latest
+    container_name: o-day-ne
+    restart: unless-stopped
+    # Bind to host loopback only — the public ingress goes through the
+    # Cloudflare Tunnel (`cloudflared` running on the host or in a sibling
+    # container), so opening 0.0.0.0:4174 would let attackers bypass Cloudflare
+    # Access and spoof `CF-Connecting-IP`. To expose externally without the
+    # tunnel, change this to "0.0.0.0:4174:4174" deliberately.
+    ports:
+      - "127.0.0.1:4174:4174"
+    environment:
+      NODE_ENV: production
+      PORT: "4174"
+      API_PORT: "8788"
+      # PUBLIC_URL: locks CORS + CSP connect-src in production. Override per-deploy.
+      PUBLIC_URL: ${PUBLIC_URL:-https://odayne.example.com}
+      # TRUST_PROXY: which forwarded-IP header to trust for rate-limit keying.
+      # `cloudflare` reads `CF-Connecting-IP` (set per-request by Cloudflare —
+      # not client-spoofable when the origin is only reachable through the
+      # tunnel). Set to empty string when not behind Cloudflare so the socket
+      # address is used instead.
+      TRUST_PROXY: ${TRUST_PROXY:-cloudflare}
+      # OTP_PREVIEW_MODE: when no Resend/Twilio provider is wired the API
+      # would otherwise hand verification codes back to the requester — which
+      # makes the "verified" badge meaningless. Default is OFF in production:
+      # `/api/me/verify/*/start` returns 503 until a real provider is wired.
+      OTP_PREVIEW_MODE: ${OTP_PREVIEW_MODE:-false}
+      # Real Google OAuth (optional). If unset, the demo provider stays active
+      # and the login popup labels itself as "Chế độ xem trước".
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
+      # Demo auth is OFF by default — anyone reaching /api/auth/demo with an
+      # email can otherwise mint a session for an arbitrary new account, and
+      # (until the account-takeover fix) could collide with real users by
+      # email. Set to "true" only for local preview / staging where you
+      # explicitly need the "Chế độ xem trước" login path.
+      ALLOW_DEMO_AUTH: ${ALLOW_DEMO_AUTH:-false}
+      # Seed demo data is OFF by default — fresh production deploys must not
+      # ship with admin@odayne.local pre-seeded as an admin (combined with
+      # demo auth, that's a one-request takeover). Set to "true" for local
+      # preview to get the Hanoi sample rooms + demo admin.
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-false}
+      # ADMIN_TOKEN: optional shared secret for ops to hit /api/admin/* without
+      # a logged-in admin session (recovery channel). Leave empty to disable.
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-}
+      # Cloudinary signed upload (optional). When CLOUDINARY_CLOUD_NAME +
+      # API_KEY + API_SECRET are all set, uploads go directly to Cloudinary
+      # instead of backend/data/uploads/. CSP also widens to allow
+      # api.cloudinary.com when cloud name is present.
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
+      CLOUDINARY_UPLOAD_FOLDER: ${CLOUDINARY_UPLOAD_FOLDER:-odayne/rooms}
+      BACKUP_INTERVAL_MIN: ${BACKUP_INTERVAL_MIN:-360}
+      BACKUP_KEEP: ${BACKUP_KEEP:-10}
+    volumes:
+      - odn-data:/app/backend/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4174/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  odn-data:
+    name: odn-data

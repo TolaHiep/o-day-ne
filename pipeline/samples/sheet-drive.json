@@ -1,0 +1,35 @@
+[
+  {
+    "id": "row-1",
+    "title": "Phòng studio gác xép Quan Hoa",
+    "price": "4200000",
+    "area": "24",
+    "district": "Cầu Giấy",
+    "address": "Ngõ 165 Cầu Giấy",
+    "phone": "0964 220 778",
+    "images": "https://drive.google.com/file/d/1AaBbCcDdEeFfGgHhIiJjKkLlMm/view\nhttps://drive.google.com/open?id=1Pp22QqRrSsTt33UuVvWwXxYyZz",
+    "amenities": "điều hoà, wc riêng, ban công",
+    "description": "Phòng gác lửng tầng 4 mới sơn lại. Có gác ngủ riêng, dưới bếp ăn. Tự do giờ giấc, có cửa sổ thoáng. 4tr2/tháng.",
+    "posted_at": "2026-05-18",
+    "url": "https://docs.google.com/spreadsheets/d/EXAMPLE/edit#gid=0&row=2"
+  },
+  {
+    "id": "row-2",
+    "title": "Mini apartment Mỹ Đình",
+    "price": "8200000",
+    "area": "38",
+    "district": "Nam Từ Liêm",
+    "address": "Đường Trần Văn Lai",
+    "phone": "0987002119",
+    "images": "https://drive.google.com/uc?id=2AAbbccddeeffgghhiijjkkll",
+    "amenities": "máy giặt, thang máy, an ninh camera",
+    "description": "Căn studio full nội thất, phòng tắm kính. Toà có thang máy, PCCC chuẩn. Khoảng 8.2 triệu/tháng.",
+    "posted_at": "2026-05-15"
+  },
+  {
+    "id": "row-3",
+    "title": "",
+    "price": "",
+    "description": "Cho thuê phòng ở Hoàn Kiếm, ngõ Tạ Hiện, 22m2, có điều hoà và wc khép kín, giá 5tr2/tháng. Liên hệ 0903.451.220 (chị Nga). Ảnh: https://example.com/p1.jpg, https://example.com/p2.jpg"
+  }
+]

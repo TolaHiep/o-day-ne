@@ -1,0 +1,42 @@
+{
+  "name": "o-day-ne",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --config frontend/vite.config.ts",
+    "dev:api": "node backend/src/api.mjs",
+    "build": "tsc -b && vite build --config frontend/vite.config.ts",
+    "preview": "vite preview --config frontend/vite.config.ts",
+    "serve": "node backend/src/web.mjs",
+    "api": "node backend/src/api.mjs",
+    "start": "node backend/src/docker-entry.mjs",
+    "lint": "tsc -b --noEmit",
+    "test": "node --test backend/tests/api.test.mjs backend/tests/image_cleanup.test.mjs",
+    "db:backup": "node backend/scripts/db.mjs backup",
+    "db:list": "node backend/scripts/db.mjs list",
+    "db:restore": "node backend/scripts/db.mjs restore",
+    "db:vacuum": "node backend/scripts/db.mjs vacuum",
+    "pipeline": "node pipeline/scripts/import.mjs",
+    "pipeline:dry-run:sheet": "node pipeline/scripts/import.mjs --source sheet-drive --file pipeline/samples/sheet-drive.json --pretty",
+    "pipeline:dry-run:zalo": "node pipeline/scripts/import.mjs --source zalo-forward --file pipeline/samples/zalo-forward.json --pretty",
+    "pipeline:dry-run:fb": "node pipeline/scripts/import.mjs --source facebook-group --file pipeline/samples/facebook-group.json --pretty",
+    "pipeline:sheet:dry-run": "node pipeline/scripts/sync-sheet-to-db.mjs --sheet-url https://docs.google.com/spreadsheets/d/12e0fbnuxh4yd1B07b89GdQuJYrGybFpE2MXNHBOLAgA/edit?gid=0 --download pipeline/out/sheet-live.xlsx",
+    "pipeline:sheet:write": "node pipeline/scripts/sync-sheet-to-db.mjs --sheet-url https://docs.google.com/spreadsheets/d/12e0fbnuxh4yd1B07b89GdQuJYrGybFpE2MXNHBOLAgA/edit?gid=0 --download pipeline/out/sheet-live.xlsx --write"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.10.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}

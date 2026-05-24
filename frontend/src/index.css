@@ -1,0 +1,192 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    height: 100%;
+  }
+  body {
+    /* Belt-and-braces guard against horizontal overflow from fixed full-bleed elements on mobile. */
+    overflow-x: clip;
+    color: #15110d;
+    background-color: #f7f3ea;
+    background-image:
+      radial-gradient(60rem 40rem at 110% -10%, rgba(196, 90, 55, 0.10), transparent 60%),
+      radial-gradient(50rem 36rem at -10% 110%, rgba(19, 138, 79, 0.10), transparent 60%),
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.07 0 0 0 0 0.06 0 0 0 0 0.05 0 0 0 0.035 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    background-attachment: fixed;
+    background-size: auto, auto, 180px 180px;
+  }
+  /* iOS landscape can break vh; pin background but allow content scroll. */
+  @supports (-webkit-touch-callout: none) {
+    body { background-attachment: scroll; }
+  }
+  ::selection {
+    background: rgba(19, 138, 79, 0.22);
+  }
+  /* Slightly tighter base on tiny phones so headings + chips don't crowd. */
+  @media (max-width: 360px) {
+    html { font-size: 15px; }
+  }
+  /* Friendlier focus ring across the app. */
+  :focus-visible {
+    outline: none;
+  }
+}
+
+@layer components {
+  /* ─── Pills & chips ─────────────────────────────────────────────── */
+  .pill {
+    @apply inline-flex items-center gap-1 rounded-full bg-cream-200/80 px-2.5 py-1 text-xs font-medium text-ink-800;
+  }
+  .pill-leaf    { @apply bg-leaf-50 text-leaf-700 ring-1 ring-leaf-100; }
+  .pill-coral   { @apply bg-coral-50 text-coral-500 ring-1 ring-coral-100; }
+  .pill-cream   { @apply bg-cream-200/80 text-ink-700; }
+  .pill-verified{ @apply bg-leaf-100 text-leaf-700 ring-1 ring-leaf-300; }
+
+  /* ─── Buttons ───────────────────────────────────────────────────── */
+  .btn {
+    @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-full font-semibold
+           transition-all duration-200 ease-out
+           focus:outline-none focus-visible:ring-2 focus-visible:ring-leaf-400 focus-visible:ring-offset-2
+           focus-visible:ring-offset-cream-100 disabled:cursor-not-allowed disabled:opacity-50
+           disabled:pointer-events-none active:scale-[0.98];
+  }
+  .btn-leaf {
+    @apply btn bg-leaf-500 text-white hover:bg-leaf-600 active:bg-leaf-700 shadow-soft
+           hover:shadow-card;
+  }
+  .btn-coral {
+    @apply btn bg-coral-400 text-white hover:bg-coral-500 active:bg-coral-500 shadow-soft;
+  }
+  .btn-ghost {
+    @apply btn bg-cream-200/80 text-ink-800 hover:bg-cream-300 active:bg-cream-300;
+  }
+  .btn-outline {
+    @apply btn ring-1 ring-ink-500/15 text-ink-800 bg-white/70 backdrop-blur hover:bg-white hover:ring-leaf-400/40;
+  }
+  .btn-dark {
+    @apply btn bg-ink-900 text-white hover:bg-ink-800 shadow-soft;
+  }
+  .btn-pill { @apply px-4 py-2 text-sm; }
+  .btn-lg   { @apply px-6 py-3 text-base; }
+
+  /* ─── Form controls ────────────────────────────────────────────── */
+  .input {
+    @apply w-full rounded-2xl border border-cream-300 bg-white px-4 py-3 text-ink-900 placeholder:text-ink-400
+           shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]
+           transition focus:border-leaf-400 focus:outline-none focus:ring-4 focus:ring-leaf-200/50;
+  }
+  .label {
+    @apply mb-1.5 block text-[12.5px] font-semibold uppercase tracking-wide text-ink-500;
+  }
+
+  /* ─── Surfaces ─────────────────────────────────────────────────── */
+  .card-soft {
+    @apply rounded-3xl bg-white/85 backdrop-blur shadow-soft p-5
+           ring-1 ring-ink-900/[0.04];
+  }
+  .card-flat {
+    @apply rounded-3xl bg-white p-5 ring-1 ring-cream-300;
+  }
+  /* Quiet inset surface used inside cards (price tile, stats). */
+  .tile {
+    @apply rounded-2xl bg-cream-100/80 px-3 py-2 ring-1 ring-cream-200/80;
+  }
+
+  /* ─── Stamps for swipe overlay ─────────────────────────────────── */
+  .stamp {
+    @apply pointer-events-none absolute top-8 select-none font-display text-4xl font-bold uppercase tracking-wider;
+    text-shadow: 2px 2px 0 rgba(255,255,255,0.6);
+  }
+  .stamp-like {
+    @apply left-6 text-leaf-500;
+    transform: rotate(-12deg);
+  }
+  .stamp-pass {
+    @apply right-6 text-coral-400;
+    transform: rotate(12deg);
+  }
+  /* Swipe-up reveals "Chi tiết" stamp centered at the top — no tilt because
+     vertical gesture has no left/right bias to telegraph. */
+  .stamp-detail {
+    @apply left-1/2 -translate-x-1/2 text-cream-50;
+  }
+
+  .ribbon {
+    @apply inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider;
+  }
+
+  /* ─── Scrollbars + safe area ───────────────────────────────────── */
+  .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgba(21, 17, 13, 0.18); border-radius: 9999px;
+  }
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+  .mb-safe { margin-bottom: env(safe-area-inset-bottom, 0px); }
+
+  /* ─── Section heading helper ───────────────────────────────────── */
+  .eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-500;
+  }
+}
+
+/* ── Postcard texture (legacy class kept; visually retuned) ───────── */
+.postcard-edge {
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0,
+    transparent 9px,
+    rgba(255, 255, 255, 0.35) 9px,
+    rgba(255, 255, 255, 0.35) 13px
+  );
+}
+
+/* ── Match stamp border ─────────────────────────────────────────── */
+.match-stamp {
+  border: 3px solid currentColor;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-family: "Fraunces", serif;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ── Scroll snap for tiny galleries ─────────────────────────────── */
+.snap-x-row {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+.snap-x-row > * { scroll-snap-align: start; }
+
+/* ── Skeleton shimmer used while loading ────────────────────────── */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(90deg, #efe6d2 0%, #f4ecd9 40%, #efe6d2 80%);
+}
+.skeleton::after {
+  content: '';
+  position: absolute; inset: 0;
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.55) 50%,
+    transparent 100%
+  );
+  animation: shimmer 1.6s linear infinite;
+}
+
+/* ── Decorative dotted grid (used on hero/empty states) ─────────── */
+.dot-grid {
+  background-image: radial-gradient(rgba(21, 17, 13, 0.10) 1px, transparent 1px);
+  background-size: 14px 14px;
+}
+
+/* ── Hide native number spinner ─────────────────────────────────── */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type=number] { -moz-appearance: textfield; }

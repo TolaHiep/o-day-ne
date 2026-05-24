@@ -1,0 +1,56 @@
+{
+  "$comment": "Copy to pipeline/config.json (gitignored) and edit. Today only the local-mode hints are read; the *.live blocks are placeholders for when real connectors are wired up.",
+
+  "review": {
+    "minConfidence": 0.35,
+    "autoReject": {
+      "missingPhone": false,
+      "missingPrice": false,
+      "looksLikeRequest": true
+    },
+    "outputDir": "pipeline/out",
+    "keepLastReviewFiles": 30
+  },
+
+  "sources": {
+    "sheet-drive": {
+      "enabled": true,
+      "local": {
+        "default": "pipeline/samples/sheet-drive.json"
+      },
+      "live": {
+        "$todo": "Wire later. Fill these in when you create a Google Cloud project + service account.",
+        "spreadsheetId": "",
+        "sheetName": "Listings",
+        "range": "A2:K",
+        "credentialsPath": "",
+        "driveBaseDownloadUrl": "https://drive.google.com/uc?export=view&id="
+      }
+    },
+
+    "zalo-forward": {
+      "enabled": true,
+      "local": {
+        "default": "pipeline/samples/zalo-forward.json"
+      },
+      "live": {
+        "$todo": "Zalo has no public group API. Plan: operator runs a collector account that forwards rental posts; an on-device companion uploads the daily export to this folder.",
+        "collectorAccount": "",
+        "exportDir": "_ingest/zalo"
+      }
+    },
+
+    "facebook-group": {
+      "enabled": true,
+      "local": {
+        "default": "pipeline/samples/facebook-group.json"
+      },
+      "live": {
+        "$todo": "Use Meta Graph API only for groups the operator administers.",
+        "graphApiVersion": "v19.0",
+        "accessTokenEnvVar": "FB_GRAPH_TOKEN",
+        "groupIds": []
+      }
+    }
+  }
+}

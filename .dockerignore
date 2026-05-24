@@ -1,0 +1,39 @@
+# Build context exclusions — keep the Docker build small + reproducible.
+node_modules
+dist
+.git
+.gitignore
+.github
+.vscode
+.idea
+
+# Runtime artefacts — built fresh in the image, never copy from host
+backend/data
+_runtime
+*.log
+*.tsbuildinfo
+cloudflared
+cloudflared.exe
+
+# Secrets / local-only env
+.env
+.env.local
+.env.*.local
+
+# Test scratch
+tmp
+
+# Project docs we don't need in the image
+_archive
+docs
+DEPLOY.md
+DESIGN_BRIEF.md
+README.md
+.claude
+.claude-*.md
+
+# Pipeline ships in the image so operators can `docker exec` the live-sheet
+# sync against the container's data volume. Samples + extracted run artefacts
+# under pipeline/out/ are local-only.
+pipeline/out
+pipeline/samples

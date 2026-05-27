@@ -75,12 +75,12 @@ export function LoginPopup() {
         <div className="overflow-y-auto pb-safe scrollbar-thin">
           <div className="px-6 pt-7 pb-2">
             <div className="flex items-center gap-3">
-              <div className="relative block h-11 w-11 shrink-0 overflow-hidden rounded-2xl bg-cream-50 shadow-soft ring-1 ring-ink-900/[0.04]">
+              <div className="relative block h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-cream-50 shadow-soft ring-1 ring-ink-900/[0.04]">
                 <img
                   src="/logo-odayne.png"
                   alt="Ở Đây Nè"
-                  width={44}
-                  height={44}
+                  width={56}
+                  height={56}
                   className="h-full w-full object-cover"
                   loading="eager"
                   decoding="async"

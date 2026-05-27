@@ -23,25 +23,38 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className={`flex min-h-screen flex-col ${lockToViewport ? 'md:h-screen md:min-h-0 md:overflow-hidden' : ''}`}>
       <header className="sticky top-0 z-30 border-b border-ink-900/[0.06] bg-cream-100/85 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl flex-nowrap items-center gap-2 px-3 py-2.5 sm:gap-3 sm:px-6 sm:py-3">
+        {/* 3-column grid: logo pinned far left, nav centered inside the
+            max-w-7xl content track (matches the swipe deck's centerline),
+            actions pinned far right. The side columns are `minmax(0,1fr)`
+            so they share remaining space equally, which is what keeps the
+            middle (auto-sized) nav optically centered regardless of how
+            wide the logo or actions get. Each child explicitly sets its
+            `col-start-*` because the nav uses `display:none` on phones —
+            a hidden grid child is skipped by auto-placement, so without
+            explicit columns the actions would slide into column 2. */}
+        <div className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 px-3 py-2.5 sm:gap-3 sm:px-6 sm:py-3">
           <button
             onClick={() => goDiscover()}
-            className="flex shrink-0 cursor-pointer items-center gap-2.5"
+            className="col-start-1 flex shrink-0 cursor-pointer items-center gap-2.5 justify-self-start"
             aria-label="Về trang quẹt phòng"
           >
-            <span className="relative block h-9 w-9 shrink-0 overflow-hidden rounded-2xl bg-cream-50 shadow-soft ring-1 ring-ink-900/[0.04] sm:h-10 sm:w-10">
+            <span className="relative block h-11 w-11 shrink-0 overflow-hidden rounded-2xl bg-cream-50 shadow-soft ring-1 ring-ink-900/[0.04] sm:h-12 sm:w-12">
               <img
                 src="/logo-odayne.png"
                 alt="Ở Đây Nè"
-                width={40}
-                height={40}
+                width={48}
+                height={48}
                 className="h-full w-full object-cover"
                 loading="eager"
                 decoding="async"
               />
             </span>
             <div className="text-left leading-tight">
-              <p className="whitespace-nowrap font-display text-base font-semibold tracking-tight text-ink-900 sm:text-[1.05rem]">Ở Đây Nè</p>
+              <p className="whitespace-nowrap font-display text-base font-extrabold sm:text-[1.05rem]">
+                <span className="text-coral-400">Ở</span>{' '}
+                <span className="text-leaf-500">Đây</span>{' '}
+                <span className="text-coral-400">Nè</span>
+              </p>
               {/* Subtitle only on large screens — keeps header tight on tablet
                   where top nav items already compete for space. */}
               <p className="hidden whitespace-nowrap text-[11px] text-ink-500 lg:block">Quẹt là thấy nhà — Hà Nội của bạn</p>
@@ -51,11 +64,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           {/* Top nav appears from md (tablet) up; phones use the bottom tab
               bar instead. On md we trim long labels via responsive show/hide
               spans so the nav fits within the available header width. The
-              nav uses ml-auto AND the actions block below uses ml-auto so
-              the remaining space is distributed evenly on both sides of the
-              nav — keeping logo / nav / actions visually balanced rather
-              than crammed against the right edge. */}
-          <nav className="ml-auto hidden flex-nowrap items-center gap-0.5 text-sm font-medium text-ink-700 md:flex lg:gap-1">
+              parent grid centers this nav inside the max-w-7xl track, so it
+              lines up with the swipe deck centerline regardless of how wide
+              the logo or actions get. */}
+          <nav className="col-start-2 hidden flex-nowrap items-center gap-0.5 justify-self-center text-sm font-medium text-ink-700 md:flex lg:gap-1">
             <NavItem
               active={route.name === 'discover'}
               onClick={() => goDiscover()}
@@ -111,7 +123,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           {auth.ready && (
             auth.user ? (
-              <div className="ml-auto flex shrink-0 flex-nowrap items-center gap-2">
+              <div className="col-start-3 flex shrink-0 flex-nowrap items-center gap-2 justify-self-end">
                 <button
                   onClick={() => goInbox()}
                   className="inline-flex cursor-pointer items-center gap-1 rounded-full bg-cream-200/80 px-2.5 py-1.5 text-xs font-semibold text-ink-700 ring-1 ring-ink-900/[0.04] transition hover:bg-cream-300 sm:px-3"
@@ -161,7 +173,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             ) : (
               <button
                 onClick={() => auth.openPopup('save')}
-                className="btn-leaf btn-pill ml-auto shrink-0"
+                className="btn-leaf btn-pill col-start-3 shrink-0 justify-self-end"
               >
                 Đăng nhập
               </button>
@@ -189,12 +201,12 @@ export function AppShell({ children }: { children: ReactNode }) {
       <footer className={`mt-8 border-t border-ink-900/[0.06] bg-cream-100/60 ${lockToViewport ? 'hidden' : 'hidden md:block'}`}>
         <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-6 text-xs text-ink-500 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div className="flex items-center gap-2">
-            <span className="inline-block h-6 w-6 shrink-0 overflow-hidden rounded-md bg-cream-50 ring-1 ring-ink-900/[0.04]">
+            <span className="inline-block h-8 w-8 shrink-0 overflow-hidden rounded-md bg-cream-50 ring-1 ring-ink-900/[0.04]">
               <img
                 src="/logo-odayne.png"
                 alt=""
-                width={24}
-                height={24}
+                width={32}
+                height={32}
                 className="h-full w-full object-cover"
                 loading="lazy"
                 decoding="async"

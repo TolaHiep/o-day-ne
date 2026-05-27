@@ -8,6 +8,7 @@ import {
   ROOM_TYPE_LABEL, formatFee, formatVND, formatVNDExact, relativeTime,
 } from '../lib/format'
 import { Icon } from '../components/Icon'
+import { LeadModal, type LeadModalMode } from '../components/LeadModal'
 
 export function RoomDetailPage({ roomId }: { roomId: string }) {
   const auth = useAuth()
@@ -23,6 +24,7 @@ export function RoomDetailPage({ roomId }: { roomId: string }) {
   const [showPhotoForm, setShowPhotoForm] = useState(false)
   const [contactRevealed, setContactRevealed] = useState(false)
   const [actionMsg, setActionMsg] = useState<string | null>(null)
+  const [leadMode, setLeadMode] = useState<LeadModalMode | null>(null)
 
   const load = async () => {
     setLoading(true); setError(null)
@@ -181,6 +183,14 @@ export function RoomDetailPage({ roomId }: { roomId: string }) {
               <Icon.Phone size={16} /> Hiện số điện thoại
             </button>
           )}
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button onClick={() => setLeadMode('viewing')} className="btn-leaf btn-pill">
+              <Icon.Eye size={14} /> Hẹn xem phòng
+            </button>
+            <button onClick={() => setLeadMode('consultation')} className="btn-outline btn-pill">
+              <Icon.Sparkles size={14} /> Nhận tư vấn
+            </button>
+          </div>
           <div className="mt-3 grid grid-cols-2 gap-2">
             {isSaved ? (
               <button onClick={doUnsave} className="btn-ghost btn-pill">
@@ -360,6 +370,14 @@ export function RoomDetailPage({ roomId }: { roomId: string }) {
               <Icon.Phone size={14} /> Hiện số điện thoại
             </button>
           )}
+          <div className="mt-3 grid gap-2">
+            <button onClick={() => setLeadMode('viewing')} className="btn-leaf btn-pill">
+              <Icon.Eye size={14} /> Hẹn xem phòng
+            </button>
+            <button onClick={() => setLeadMode('consultation')} className="btn-outline btn-pill">
+              <Icon.Sparkles size={14} /> Nhận tư vấn
+            </button>
+          </div>
           <p className="mt-2 text-[11px] text-ink-500">Nhắn “Em xem phòng từ Ở Đây Nè” để được nhanh hơn.</p>
         </div>
 
@@ -468,6 +486,14 @@ export function RoomDetailPage({ roomId }: { roomId: string }) {
           )}
         </div>
       </div>
+
+      <LeadModal
+        mode={leadMode || 'viewing'}
+        open={leadMode !== null}
+        onClose={() => setLeadMode(null)}
+        room={{ id: room.id, title: room.title }}
+        onSubmitted={() => { setActionMsg('Tư vấn viên của chúng tôi sẽ sớm liên hệ với bạn.') }}
+      />
     </div>
   )
 }

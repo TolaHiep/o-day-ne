@@ -240,6 +240,67 @@ safeExec(`
 `)
 safeExec(`CREATE INDEX IF NOT EXISTS oauth_states_expires ON oauth_states(expires_at)`)
 
+// lead_profiles: a single saved name/phone per identity (user_id when logged in,
+// or a long-lived anonymous client_id when not). Used to prefill the
+// consultation modal so a returning seeker only has to confirm. Keyed by
+// `lead_key` which is either `user:<id>` or `anon:<clientId>` — this makes the
+// "logged in vs anonymous" branch a row-level concern, not a separate table.
+safeExec(`
+  CREATE TABLE IF NOT EXISTS lead_profiles (
+    lead_key TEXT PRIMARY KEY,
+    user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+    client_id TEXT,
+    name TEXT NOT NULL,
+    phone TEXT NOT NULL,
+    email TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  )
+`)
+safeExec(`CREATE INDEX IF NOT EXISTS lead_profiles_user ON lead_profiles(user_id)`)
+
+// viewing_appointments: a seeker asked to physically visit a specific room.
+// preferred_at is a free-form ISO-ish string (the front end sends datetime-
+// local). Stored as TEXT so we don't lose timezone framing for the human
+// "T2 7h tối" range. status is for follow-up bookkeeping by the consultant.
+safeExec(`
+  CREATE TABLE IF NOT EXISTS viewing_appointments (
+    id TEXT PRIMARY KEY,
+    lead_key TEXT NOT NULL,
+    user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    client_id TEXT,
+    room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    phone TEXT NOT NULL,
+    preferred_at TEXT NOT NULL,
+    note TEXT,
+    status TEXT NOT NULL DEFAULT 'new',
+    created_at INTEGER NOT NULL
+  )
+`)
+safeExec(`CREATE INDEX IF NOT EXISTS viewing_lead ON viewing_appointments(lead_key, created_at DESC)`)
+safeExec(`CREATE INDEX IF NOT EXISTS viewing_room ON viewing_appointments(room_id, created_at DESC)`)
+
+// consultation_requests: a seeker asked to be contacted (no specific room
+// required, though the modal optionally passes one through for context).
+// A given lead can have many — each represents a touch — but the lead's
+// canonical name/phone lives in lead_profiles.
+safeExec(`
+  CREATE TABLE IF NOT EXISTS consultation_requests (
+    id TEXT PRIMARY KEY,
+    lead_key TEXT NOT NULL,
+    user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    client_id TEXT,
+    room_id TEXT REFERENCES rooms(id) ON DELETE SET NULL,
+    name TEXT NOT NULL,
+    phone TEXT NOT NULL,
+    note TEXT,
+    status TEXT NOT NULL DEFAULT 'new',
+    created_at INTEGER NOT NULL
+  )
+`)
+safeExec(`CREATE INDEX IF NOT EXISTS consult_lead ON consultation_requests(lead_key, created_at DESC)`)
+
 // ---------- helpers ----------
 export function transaction(fn) { return db.transaction(fn)() }
 
@@ -593,6 +654,83 @@ const STMT = {
     deleteByRoom: db.prepare(`DELETE FROM pipeline_source_map WHERE room_id = ?`),
     list: db.prepare(`SELECT * FROM pipeline_source_map ORDER BY updated_at DESC LIMIT ?`),
   },
+  leadProfile: {
+    findByKey: db.prepare(`SELECT * FROM lead_profiles WHERE lead_key = ?`),
+    upsert: db.prepare(`
+      INSERT INTO lead_profiles (lead_key, user_id, client_id, name, phone, email, created_at, updated_at)
+      VALUES (@leadKey, @userId, @clientId, @name, @phone, @email, @createdAt, @updatedAt)
+      ON CONFLICT(lead_key) DO UPDATE SET
+        name = excluded.name,
+        phone = excluded.phone,
+        email = COALESCE(excluded.email, lead_profiles.email),
+        user_id = COALESCE(excluded.user_id, lead_profiles.user_id),
+        client_id = COALESCE(excluded.client_id, lead_profiles.client_id),
+        updated_at = excluded.updated_at
+    `),
+  },
+  viewing: {
+    insert: db.prepare(`
+      INSERT INTO viewing_appointments (id, lead_key, user_id, client_id, room_id, name, phone, preferred_at, note, status, created_at)
+      VALUES (@id, @leadKey, @userId, @clientId, @roomId, @name, @phone, @preferredAt, @note, 'new', @createdAt)
+    `),
+    findById: db.prepare(`SELECT * FROM viewing_appointments WHERE id = ?`),
+    listForLead: db.prepare(`SELECT * FROM viewing_appointments WHERE lead_key = ? ORDER BY created_at DESC LIMIT ?`),
+  },
+  consultation: {
+    insert: db.prepare(`
+      INSERT INTO consultation_requests (id, lead_key, user_id, client_id, room_id, name, phone, note, status, created_at)
+      VALUES (@id, @leadKey, @userId, @clientId, @roomId, @name, @phone, @note, 'new', @createdAt)
+    `),
+    findById: db.prepare(`SELECT * FROM consultation_requests WHERE id = ?`),
+    listForLead: db.prepare(`SELECT * FROM consultation_requests WHERE lead_key = ? ORDER BY created_at DESC LIMIT ?`),
+  },
+}
+
+function rowToLeadProfile(r) {
+  if (!r) return null
+  return {
+    leadKey: r.lead_key,
+    userId: r.user_id,
+    clientId: r.client_id,
+    name: r.name,
+    phone: r.phone,
+    email: r.email,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  }
+}
+
+function rowToViewing(r) {
+  if (!r) return null
+  return {
+    id: r.id,
+    leadKey: r.lead_key,
+    userId: r.user_id,
+    clientId: r.client_id,
+    roomId: r.room_id,
+    name: r.name,
+    phone: r.phone,
+    preferredAt: r.preferred_at,
+    note: r.note,
+    status: r.status,
+    createdAt: r.created_at,
+  }
+}
+
+function rowToConsultation(r) {
+  if (!r) return null
+  return {
+    id: r.id,
+    leadKey: r.lead_key,
+    userId: r.user_id,
+    clientId: r.client_id,
+    roomId: r.room_id,
+    name: r.name,
+    phone: r.phone,
+    note: r.note,
+    status: r.status,
+    createdAt: r.created_at,
+  }
 }
 
 // ---------- collection API ----------
@@ -845,6 +983,64 @@ export const feedbacks = {
   list(limit = 200) { return STMT.feedback.listWithAuthor.all(limit).map(rowToFeedback) },
   delete(id) { return STMT.feedback.delete.run(id).changes },
   count() { return STMT.feedback.count.get().c },
+}
+
+export const leadProfiles = {
+  findByKey(leadKey) { return rowToLeadProfile(STMT.leadProfile.findByKey.get(leadKey)) },
+  upsert({ leadKey, userId = null, clientId = null, name, phone, email = null, now = Date.now() }) {
+    STMT.leadProfile.upsert.run({
+      leadKey,
+      userId,
+      clientId,
+      name,
+      phone,
+      email,
+      createdAt: now,
+      updatedAt: now,
+    })
+    return leadProfiles.findByKey(leadKey)
+  },
+}
+
+export const viewingAppointments = {
+  insert(v) {
+    STMT.viewing.insert.run({
+      id: v.id,
+      leadKey: v.leadKey,
+      userId: v.userId ?? null,
+      clientId: v.clientId ?? null,
+      roomId: v.roomId,
+      name: v.name,
+      phone: v.phone,
+      preferredAt: v.preferredAt,
+      note: v.note ?? null,
+      createdAt: v.createdAt,
+    })
+    return rowToViewing(STMT.viewing.findById.get(v.id))
+  },
+  listForLead(leadKey, limit = 100) {
+    return STMT.viewing.listForLead.all(leadKey, limit).map(rowToViewing)
+  },
+}
+
+export const consultationRequests = {
+  insert(c) {
+    STMT.consultation.insert.run({
+      id: c.id,
+      leadKey: c.leadKey,
+      userId: c.userId ?? null,
+      clientId: c.clientId ?? null,
+      roomId: c.roomId ?? null,
+      name: c.name,
+      phone: c.phone,
+      note: c.note ?? null,
+      createdAt: c.createdAt,
+    })
+    return rowToConsultation(STMT.consultation.findById.get(c.id))
+  },
+  listForLead(leadKey, limit = 100) {
+    return STMT.consultation.listForLead.all(leadKey, limit).map(rowToConsultation)
+  },
 }
 
 export const pipelineSourceMap = {

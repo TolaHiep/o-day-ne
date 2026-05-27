@@ -334,6 +334,92 @@ async function uploadToCloudinary(
   return { url: r.secure_url, bytes: r.bytes }
 }
 
+// ---------- leads (viewing appointments + consultations) ----------
+export type LeadProfile = {
+  name: string
+  phone: string
+  email?: string | null
+  updatedAt: number | null
+}
+export type ViewingAppointment = {
+  id: string
+  roomId: string
+  name: string
+  phone: string
+  preferredAt: string
+  note?: string | null
+  status: string
+  createdAt: number
+}
+export type ConsultationRequest = {
+  id: string
+  roomId: string | null
+  name: string
+  phone: string
+  note?: string | null
+  status: string
+  createdAt: number
+}
+
+export const apiLeads = {
+  async profile(clientId?: string) {
+    const q = clientId ? `?clientId=${encodeURIComponent(clientId)}` : ''
+    return request<{
+      ok: boolean
+      profile: LeadProfile | null
+      source: 'lead' | 'user' | null
+    }>(`/api/lead-profile${q}`)
+  },
+  async saveProfile(input: { name: string; phone: string; clientId?: string }) {
+    return request<{ ok: boolean; profile: LeadProfile }>('/api/lead-profile', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    })
+  },
+  async createViewing(input: {
+    roomId: string
+    name: string
+    phone: string
+    preferredAt: string
+    note?: string
+    clientId?: string
+  }) {
+    return request<{
+      ok: boolean
+      appointment: ViewingAppointment
+      message: string
+    }>('/api/viewing-appointments', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    })
+  },
+  async createConsultation(input: {
+    name: string
+    phone: string
+    roomId?: string
+    note?: string
+    clientId?: string
+  }) {
+    return request<{
+      ok: boolean
+      request: ConsultationRequest
+      message: string
+    }>('/api/consultation-requests', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    })
+  },
+  async mine(clientId?: string) {
+    const q = clientId ? `?clientId=${encodeURIComponent(clientId)}` : ''
+    return request<{
+      ok: boolean
+      viewings: ViewingAppointment[]
+      consultations: ConsultationRequest[]
+      profile: LeadProfile | null
+    }>(`/api/my-leads${q}`)
+  },
+}
+
 // ---------- feedbacks ----------
 export const apiFeedback = {
   async list() {

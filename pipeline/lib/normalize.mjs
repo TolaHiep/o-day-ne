@@ -8,15 +8,15 @@
 // Each extractor returns { value, confidence } and the caller decides how to
 // combine them into a final candidate confidence score.
 
-const HANOI_DISTRICTS = [
-  'Ba Đình', 'Hoàn Kiếm', 'Tây Hồ', 'Long Biên', 'Cầu Giấy',
-  'Đống Đa', 'Hai Bà Trưng', 'Hoàng Mai', 'Thanh Xuân',
-  'Nam Từ Liêm', 'Bắc Từ Liêm', 'Hà Đông', 'Sơn Tây',
-  'Ba Vì', 'Phúc Thọ', 'Đan Phượng', 'Hoài Đức', 'Mê Linh',
-  'Thanh Trì', 'Gia Lâm', 'Đông Anh', 'Thường Tín', 'Sóc Sơn',
-  'Thạch Thất', 'Quốc Oai', 'Chương Mỹ', 'Phú Xuyên',
-  'Ứng Hòa', 'Mỹ Đức',
-]
+// The pipeline runs imports against the same accepted-districts set the
+// backend uses, so it shares the central normalizer rather than carrying
+// its own list. The wider outer-Hanoi districts below stay only as a hint
+// list for extractDistrict's fuzzy text match — they don't widen what we
+// allow into the rooms table, because normalizeDistrict gates the final
+// value.
+import { normalizeDistrict, listCanonicalDistricts } from '../../backend/src/districts.mjs'
+
+const HANOI_DISTRICTS = listCanonicalDistricts()
 
 // amenities vocab is the same set the backend rooms table accepts.
 // (Kept here as a literal to keep pipeline standalone — see
@@ -124,14 +124,32 @@ export function extractPhone(text) {
 }
 
 // ---------- district ----------
-// Vietnamese diacritics matter. Match longest district name first so
-// "Bắc Từ Liêm" doesn't get swallowed by "Từ Liêm" partial logic.
+// Vietnamese diacritics matter for the canonical *output*, but the input
+// post text may be accented OR plain ("Dong Da" / "Đống Đa"). We compare on
+// the diacritic-folded form (via normalizeDistrict's key) and always return
+// the canonical accented name so the importer never writes "Dong Da" or
+// city-level "Hà Nội" into rooms.district.
 export function extractDistrict(text) {
   if (!text) return { value: null, confidence: 0 }
+  // Match longest district name first so "Bắc Từ Liêm" doesn't get
+  // swallowed by a "Từ Liêm" partial match.
   const sorted = [...HANOI_DISTRICTS].sort((a, b) => b.length - a.length)
+  const folded = text
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/đ/g, 'd').replace(/Đ/g, 'D')
+    .toLowerCase()
   for (const d of sorted) {
-    if (text.toLowerCase().includes(d.toLowerCase())) {
-      return { value: d, confidence: 0.85 }
+    const dFolded = d
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/đ/g, 'd').replace(/Đ/g, 'D')
+      .toLowerCase()
+    if (folded.includes(dFolded)) {
+      // Route through the normalizer so future canonical-name tweaks live
+      // in one place. d itself is already canonical, this is belt-and-
+      // suspenders for the wider Hanoi list above.
+      return { value: normalizeDistrict(d) || d, confidence: 0.85 }
     }
   }
   // "quận X" or "Q.X" — rough fallback (we don't try to map numeric → name

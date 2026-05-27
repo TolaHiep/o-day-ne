@@ -9,12 +9,12 @@
   body {
     /* Belt-and-braces guard against horizontal overflow from fixed full-bleed elements on mobile. */
     overflow-x: clip;
-    color: #15110d;
-    background-color: #f7f3ea;
+    color: #111827;
+    background-color: #F2F8F8;
     background-image:
-      radial-gradient(60rem 40rem at 110% -10%, rgba(196, 90, 55, 0.10), transparent 60%),
-      radial-gradient(50rem 36rem at -10% 110%, rgba(19, 138, 79, 0.10), transparent 60%),
-      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.07 0 0 0 0 0.06 0 0 0 0 0.05 0 0 0 0.035 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+      radial-gradient(60rem 40rem at 110% -10%, rgba(255, 63, 95, 0.07), transparent 60%),
+      radial-gradient(50rem 36rem at -10% 110%, rgba(0, 166, 166, 0.09), transparent 60%),
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.04 0 0 0 0 0.07 0 0 0 0 0.07 0 0 0 0.028 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
     background-attachment: fixed;
     background-size: auto, auto, 180px 180px;
   }
@@ -23,7 +23,7 @@
     body { background-attachment: scroll; }
   }
   ::selection {
-    background: rgba(19, 138, 79, 0.22);
+    background: rgba(0, 166, 166, 0.20);
   }
   /* Slightly tighter base on tiny phones so headings + chips don't crowd. */
   @media (max-width: 360px) {
@@ -149,7 +149,7 @@
   border: 3px solid currentColor;
   padding: 6px 12px;
   border-radius: 8px;
-  font-family: "Fraunces", serif;
+  font-family: "Baloo 2", "Be Vietnam Pro", sans-serif;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -166,7 +166,7 @@
 .skeleton {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(90deg, #efe6d2 0%, #f4ecd9 40%, #efe6d2 80%);
+  background: linear-gradient(90deg, #E3F0F0 0%, #EEF6F6 40%, #E3F0F0 80%);
 }
 .skeleton::after {
   content: '';

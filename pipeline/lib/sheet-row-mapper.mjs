@@ -17,6 +17,7 @@
 // the same trade-off the existing sheet-drive connector accepts.
 
 import { extractPriceVnd, extractAreaM2 } from './normalize.mjs'
+import { normalizeDistrict } from '../../backend/src/districts.mjs'
 
 const TEXT_PLACEHOLDER = 'liên hệ'
 const DEFAULT_AREA_M2 = 20
@@ -61,7 +62,14 @@ const DISTRICT_HINTS = [
 
 function inferDistrict(address) {
   if (!address) return null
-  for (const h of DISTRICT_HINTS) if (h.re.test(address)) return h.district
+  for (const h of DISTRICT_HINTS) {
+    if (h.re.test(address)) {
+      // Run the result through the central normalizer so any future tweak
+      // (rename, alias) lands in one place and the importer can't drift
+      // back to writing city-level or unaccented values into rooms.district.
+      return normalizeDistrict(h.district) || h.district
+    }
+  }
   return null
 }
 

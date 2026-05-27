@@ -21,6 +21,12 @@ export function DiscoverPage() {
   const [forcedDir, setForcedDir] = useState<'like' | 'pass' | null>(null)
   const [lastLikedTitle, setLastLikedTitle] = useState<string | null>(null)
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
+  // True when the current deck was fetched WITHOUT the excludeSeen filter
+  // — i.e. the user reset the deck and is intentionally re-seeing rooms
+  // they already swiped on. Surfaced in the empty state so the user
+  // understands why a "reset" still produced no rooms when there genuinely
+  // are no listings matching the filter at all.
+  const [showingSeen, setShowingSeen] = useState(false)
   // Bumped whenever a swipe was animated-out but couldn't be committed
   // (e.g. like requires login). The top SwipeCard listens and snaps back.
   const [bounceKey, setBounceKey] = useState(0)
@@ -28,19 +34,38 @@ export function DiscoverPage() {
 
   useEffect(() => { saveFilters(filters) }, [filters])
 
-  const loadRooms = useCallback(async () => {
+  const loadRooms = useCallback(async (opts: { includeSeen?: boolean } = {}) => {
     setLoading(true)
     setError(null)
+    const includeSeen = !!opts.includeSeen
     try {
-      const r = await apiRooms.list(filters, { excludeSeen: true })
-      const passed = anonPasses.current
-      const list = r.rooms.filter((rm) => !passed.has(rm.id))
+      // When the caller asks for includeSeen we also drop the anon-pass
+      // filter, otherwise the user clicks "Dọn lại" and STILL sees an
+      // empty stack because every room is in localStorage's pass set.
+      const r = await apiRooms.list(filters, { excludeSeen: !includeSeen })
+      const passed = includeSeen ? new Set<string>() : anonPasses.current
+      let list = passed.size === 0 ? r.rooms : r.rooms.filter((rm) => !passed.has(rm.id))
+
+      // Auto-refill: an authenticated user whose first fetch comes back
+      // empty solely because their seen-history covers everything would
+      // otherwise be stuck on a blank deck on initial page-load. Try once
+      // more with excludeSeen=false so they see something — labelled as
+      // "already swiped" via showingSeen.
+      let landedShowingSeen = includeSeen
+      if (!includeSeen && list.length === 0 && auth.user) {
+        const refill = await apiRooms.list(filters, { excludeSeen: false })
+        if (refill.rooms.length > 0) {
+          list = refill.rooms
+          landedShowingSeen = true
+        }
+      }
       setRooms(list)
       setTopIdx(0)
+      setShowingSeen(landedShowingSeen)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không tải được danh sách phòng.')
     } finally { setLoading(false) }
-  }, [filters])
+  }, [filters, auth.user])
 
   useEffect(() => { loadRooms() }, [loadRooms, auth.user?.id])
 
@@ -145,11 +170,22 @@ export function DiscoverPage() {
           )}
 
           {!loading && stack.length === 0 && (
-            <EmptyDeck onReset={() => {
-              anonPasses.current = new Set()
-              saveAnonPasses(anonPasses.current)
-              loadRooms()
-            }} />
+            <EmptyDeck
+              showingSeen={showingSeen}
+              loggedIn={!!auth.user}
+              onReset={() => {
+                // Clear the anon-pass localStorage cache too — without this
+                // an authenticated user who used the app anonymously first
+                // would still be filtered against their old anon set.
+                anonPasses.current = new Set()
+                saveAnonPasses(anonPasses.current)
+                // For logged-in users, includeSeen=true asks the backend to
+                // skip the seen-filter so already-swiped rooms reappear.
+                // Anonymous users just refetch normally (the backend has no
+                // seen-history for them).
+                loadRooms({ includeSeen: !!auth.user })
+              }}
+            />
           )}
 
           {stack.map((r, i) => (
@@ -298,16 +334,35 @@ function KeyboardHint() {
   )
 }
 
-function EmptyDeck({ onReset }: { onReset: () => void }) {
+function EmptyDeck({ onReset, showingSeen, loggedIn }: {
+  onReset: () => void
+  showingSeen?: boolean
+  loggedIn?: boolean
+}) {
+  // Two empty states, distinguished by whether the user has already asked
+  // to re-see swiped rooms. Before reset → "you've gone through every room
+  // in this filter" copy with a CTA that re-includes already-swiped rooms.
+  // After reset → "even with seen rooms, none match" copy that tells the
+  // user to widen the filter instead.
+  const headline = showingSeen
+    ? 'Không có phòng nào khớp bộ lọc.'
+    : 'Bạn đã quẹt hết phòng trong bộ lọc này.'
+  const hint = showingSeen
+    ? 'Bạn đã xem mọi phòng phù hợp. Nới bộ lọc để thấy phòng ở quận/khu khác.'
+    : loggedIn
+      ? 'Tất cả phòng phù hợp đã được quẹt qua. Bấm bên dưới để xem lại những phòng bạn đã bỏ qua hoặc đã hợp gu trước đó.'
+      : 'Tất cả phòng phù hợp đã được quẹt qua. Bấm bên dưới để xem lại những phòng bạn đã bỏ qua trước đó.'
   return (
     <div className="absolute inset-0 grid place-items-center rounded-[28px] bg-cream-50 ring-1 ring-cream-300 p-6 text-center dot-grid">
       <div>
         <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-leaf-50 text-leaf-700">
           <Icon.Compass size={28} />
         </div>
-        <p className="mt-3 font-display text-xl font-semibold tracking-tight">Hết phòng hợp gu hôm nay rồi.</p>
-        <p className="mt-1 text-sm text-ink-500">Thử nới bộ lọc, hoặc dọn lại danh sách đã bỏ qua.</p>
-        <button onClick={onReset} className="btn-leaf btn-pill mt-4">Dọn lại stack</button>
+        <p className="mt-3 font-display text-xl font-semibold tracking-tight">{headline}</p>
+        <p className="mt-1 text-sm text-ink-500">{hint}</p>
+        {!showingSeen && (
+          <button onClick={onReset} className="btn-leaf btn-pill mt-4">Xem lại các phòng trước</button>
+        )}
       </div>
     </div>
   )

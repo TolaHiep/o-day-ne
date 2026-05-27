@@ -15,9 +15,17 @@ import {
   transaction, publicUser, publicRoom,
   users, rooms, sessions, swipes, reviews, reports, photos, audit, verification, feedbacks,
   oauthStates,
+  leadProfiles, viewingAppointments, consultationRequests,
   snapshotBackup, VALID_AMENITY_KEYS, uploadDir,
 } from './storage.mjs'
 import { cleanupRoomImages } from './image_cleanup.mjs'
+import {
+  normalizeDistrict, isSupportedDistrict, districtsMatch, listCanonicalDistricts, isCityLevel,
+} from './districts.mjs'
+import {
+  notifyTelegram, telegramEnabled,
+  formatLeadAccount, buildViewingAppointmentMessage, buildConsultationRequestMessage,
+} from './telegram.mjs'
 
 const gzip = promisify(zlib.gzip)
 
@@ -102,10 +110,11 @@ async function disposeRoomImages(roomId, images, source) {
   }
 }
 
-const VALID_DISTRICTS = new Set([
-  'Hoàn Kiếm', 'Ba Đình', 'Đống Đa', 'Hai Bà Trưng', 'Cầu Giấy', 'Tây Hồ',
-  'Thanh Xuân', 'Hoàng Mai', 'Long Biên', 'Hà Đông', 'Nam Từ Liêm', 'Bắc Từ Liêm',
-])
+// Source of truth lives in ./districts.mjs — that module also handles
+// accent-insensitive aliases (Dong Da → Đống Đa, Nam Tu Liem → Nam Từ Liêm,
+// etc.) and refuses city-level tokens ("Hà Nội" / "Ha Noi"). We expose the
+// canonical list here for code that only needs the set of supported names.
+const VALID_DISTRICTS = new Set(listCanonicalDistricts())
 const VALID_ROOM_TYPES = new Set(['studio', 'room', 'mini_apt', 'dorm', 'shared'])
 const VALID_REPORT_REASONS = new Set([
   'fake_listing', 'wrong_price', 'wrong_address', 'spam', 'rude_owner', 'other',
@@ -995,13 +1004,23 @@ function parseRoomFilters(url) {
   // Multi-district selection: clients send repeated `?district=A&district=B`
   // params. Old clients (and saved-filter URLs) used a single value or a
   // comma-separated list — both still parse here.
+  //
+  // We canonicalize every accepted value through normalizeDistrict so
+  // unaccented inputs ("Dong Da", "Cau Giay") match accented stored values
+  // and vice-versa. Any value that fails to normalize is recorded in
+  // `unknownDistricts` so applyRoomFilters can fail-closed instead of
+  // silently widening the result to all districts.
   const districts = []
+  const unknownDistricts = []
   const seen = new Set()
   const pushDistrict = (v) => {
     if (typeof v !== 'string') return
     const s = v.trim()
-    if (!s || seen.has(s)) return
-    seen.add(s); districts.push(s)
+    if (!s) return
+    const canonical = normalizeDistrict(s)
+    if (!canonical) { unknownDistricts.push(s); return }
+    if (seen.has(canonical)) return
+    seen.add(canonical); districts.push(canonical)
   }
   for (const raw of q.getAll('district')) {
     for (const part of raw.split(',')) pushDistrict(part)
@@ -1010,6 +1029,7 @@ function parseRoomFilters(url) {
   const sort = q.get('sort') || 'match'
   return {
     districts,
+    unknownDistricts,
     roomType,
     priceMin: num('priceMin'),
     priceMax: num('priceMax'),
@@ -1022,14 +1042,22 @@ function parseRoomFilters(url) {
 
 function applyRoomFilters(list, filters) {
   let out = list
+  // Caller asked for district(s) that don't map to anything supported (e.g.
+  // a typo, or a city-level "Hà Nội" sent in the district field). Refuse
+  // rather than silently widening the result to every district — the user
+  // would otherwise see thousands of unrelated rooms and think the filter
+  // works. Returning an empty list here matches the smallest behavioural
+  // change versus the previous "silent widen" path.
+  const hasUnknownOnly =
+    (!filters.districts || filters.districts.length === 0) &&
+    Array.isArray(filters.unknownDistricts) && filters.unknownDistricts.length > 0
+  if (hasUnknownOnly) return []
   if (filters.districts && filters.districts.length) {
-    // Drop unknown districts so a typo'd query doesn't silently exclude
-    // every room; if nothing remains, skip the filter entirely.
-    const allowed = filters.districts.filter((d) => VALID_DISTRICTS.has(d))
-    if (allowed.length) {
-      const set = new Set(allowed)
-      out = out.filter((r) => set.has(r.district))
-    }
+    // filters.districts is already canonical (see parseRoomFilters). Stored
+    // rooms may still have dirty values from before write-side normalization
+    // landed, so we compare via districtsMatch which folds both sides.
+    const wanted = filters.districts
+    out = out.filter((r) => wanted.some((w) => districtsMatch(r.district, w)))
   }
   if (filters.roomType && VALID_ROOM_TYPES.has(filters.roomType)) {
     out = out.filter((r) => r.roomType === filters.roomType)
@@ -1110,7 +1138,14 @@ function validateRoomPayload(body, partial = false) {
 
   const title = (body.title || '').trim()
   const description = (body.description || '').trim()
-  const district = (body.district || '').trim()
+  // Canonicalize district at write time so the rooms table only ever stores
+  // the accented Vietnamese form (e.g. "Đống Đa"), even if the caller typed
+  // "dong da" or "Dong  Da". Anything that doesn't map to a supported Hanoi
+  // district — including the city-level "Hà Nội" — falls through to the
+  // VALID_DISTRICTS check below and surfaces a 400.
+  const districtRaw = (body.district || '').trim()
+  const districtCanonical = normalizeDistrict(districtRaw)
+  const district = districtCanonical || districtRaw
   const ward = (body.ward || '').trim()
   const addressHint = (body.addressHint || '').trim()
   const roomType = (body.roomType || '').trim()
@@ -1146,7 +1181,12 @@ function validateRoomPayload(body, partial = false) {
   if (!partial || title) required(strField(title, MAX_TITLE), 'Tiêu đề từ 1–140 ký tự.')
   if (!partial || description) required(strField(description, MAX_DESC), 'Mô tả từ 1–4000 ký tự.')
   if (!partial || roomType) required(VALID_ROOM_TYPES.has(roomType), 'Loại phòng không hợp lệ.')
-  if (!partial || district) required(VALID_DISTRICTS.has(district), 'Quận/Huyện chưa hỗ trợ.')
+  if (!partial || districtRaw) required(
+    !!districtCanonical && VALID_DISTRICTS.has(districtCanonical),
+    isCityLevel(districtRaw)
+      ? 'Vui lòng chọn quận/huyện cụ thể trong Hà Nội thay vì "Hà Nội" chung.'
+      : 'Quận/Huyện chưa hỗ trợ.',
+  )
   if (!partial || ward) required(strField(ward, 80), 'Phường không hợp lệ.')
   if (!partial || addressHint) required(strField(addressHint, 200), 'Mô tả vị trí không hợp lệ.')
   if (!partial || body.priceVnd !== undefined) required(Number.isFinite(priceVnd) && priceVnd >= 300_000 && priceVnd <= 200_000_000, 'Giá thuê 300k – 200tr.')
@@ -1690,6 +1730,7 @@ async function handleHealth(req, res) {
     googleOauth: GOOGLE_OAUTH_ENABLED,
     demoAuth: ALLOW_DEMO_AUTH,
     uploads: CLOUDINARY_ENABLED ? `cloudinary:${CLOUDINARY_CLOUD_NAME}` : 'local',
+    telegram: telegramEnabled() ? 'on' : 'off',
   })
 }
 
@@ -1823,6 +1864,324 @@ async function handleAdminFeedbackCsv(req, res) {
   audit.push('feedback.export', { adminId: admin.id, count: list.length })
 }
 
+// ---------- leads (viewing appointments + consultation requests) ----------
+// A "lead" is the seeker who wants to be contacted by our consultant — either
+// to schedule a physical viewing of a specific room, or just to ask for help
+// in general. We persist one canonical name/phone profile per lead identity:
+//   * authenticated user → lead_key = `user:<userId>`
+//   * anonymous browser  → lead_key = `anon:<clientId>` (uuid-ish, stored in
+//                          the browser's localStorage and sent in the request)
+// This lets a returning anonymous user prefill their info from a previous
+// submission, and lets a logged-in user keep one record across sessions.
+const ANON_CLIENT_ID_RE = /^[A-Za-z0-9_-]{8,64}$/
+const MAX_LEAD_NOTE = 500
+const MAX_PREFERRED_AT = 80
+
+// Limits — these are intentionally generous in the steady state (we expect
+// few legit submissions per device per hour) but defensive against scripted
+// abuse. Per-IP buckets piggy-back on the existing `write` rate limit so the
+// shape stays predictable.
+function leadIdentity(req) {
+  const u = userForRequest(req)
+  if (u) return { userId: u.id, clientId: null, leadKey: `user:${u.id}`, user: u }
+  return { userId: null, clientId: null, leadKey: null, user: null }
+}
+
+function resolveLeadIdentity(req, body) {
+  const base = leadIdentity(req)
+  if (base.leadKey) return base
+  const raw = typeof body?.clientId === 'string' ? body.clientId.trim() : ''
+  if (!raw || !ANON_CLIENT_ID_RE.test(raw)) return null
+  return { userId: null, clientId: raw, leadKey: `anon:${raw}`, user: null }
+}
+
+function validateLeadContact(body) {
+  const errors = []
+  const name = String(body?.name || '').trim()
+  const phone = String(body?.phone || '').trim()
+  if (!name || !NAME_RE.test(name)) errors.push('Tên không hợp lệ.')
+  if (!phone || !PHONE_RE.test(phone)) errors.push('Số điện thoại không hợp lệ.')
+  return { ok: errors.length === 0, errors, name, phone }
+}
+
+function publicLeadProfile(p) {
+  if (!p) return null
+  return {
+    name: p.name,
+    phone: p.phone,
+    email: p.email || null,
+    updatedAt: p.updatedAt,
+  }
+}
+
+function publicViewing(v) {
+  if (!v) return null
+  return {
+    id: v.id,
+    roomId: v.roomId,
+    name: v.name,
+    phone: v.phone,
+    preferredAt: v.preferredAt,
+    note: v.note,
+    status: v.status,
+    createdAt: v.createdAt,
+  }
+}
+
+function publicConsultation(c) {
+  if (!c) return null
+  return {
+    id: c.id,
+    roomId: c.roomId,
+    name: c.name,
+    phone: c.phone,
+    note: c.note,
+    status: c.status,
+    createdAt: c.createdAt,
+  }
+}
+
+async function handleGetLeadProfile(req, res, url) {
+  // GET /api/lead-profile[?clientId=…]
+  // Returns the persisted profile so the modal can prefill. For a logged-in
+  // user we also fall back to their user record's name/phone if no lead
+  // profile exists yet, so first-time flows still feel one-tap.
+  const u = userForRequest(req)
+  let profile = null
+  let source = null
+  if (u) {
+    profile = leadProfiles.findByKey(`user:${u.id}`)
+    source = profile ? 'lead' : null
+    if (!profile && (u.name || u.phone)) {
+      // Light hint — the modal will treat this as defaults, not as saved data.
+      return sendJson(req, res, 200, {
+        ok: true,
+        profile: { name: u.name || '', phone: u.phone || '', email: u.email || null, updatedAt: null },
+        source: 'user',
+      })
+    }
+  } else {
+    const clientId = (url.searchParams.get('clientId') || '').trim()
+    if (clientId && ANON_CLIENT_ID_RE.test(clientId)) {
+      profile = leadProfiles.findByKey(`anon:${clientId}`)
+      source = profile ? 'lead' : null
+    }
+  }
+  return sendJson(req, res, 200, {
+    ok: true,
+    profile: publicLeadProfile(profile),
+    source,
+  })
+}
+
+async function handlePutLeadProfile(req, res) {
+  // POST /api/lead-profile — explicit "remember me" used by the consultation
+  // modal when the user edits and saves their info without yet creating a
+  // ticket. Most callers go through the viewing/consultation endpoints, which
+  // upsert this row as a side-effect.
+  const ip = clientIp(req)
+  const rl = rateHit(`lead-profile:${ip}`, 30, 60 * 60 * 1000)
+  if (!rl.ok) return rateLimited(req, res, rl.retryAfter)
+
+  const body = await readJsonBody(req).catch(() => null)
+  if (!body) return badRequest(req, res, 'JSON không hợp lệ.')
+  const ident = resolveLeadIdentity(req, body)
+  if (!ident) return badRequest(req, res, 'Thiếu định danh khách (clientId).')
+  const v = validateLeadContact(body)
+  if (!v.ok) return badRequest(req, res, v.errors.join(' '))
+
+  const now = Date.now()
+  const profile = leadProfiles.upsert({
+    leadKey: ident.leadKey,
+    userId: ident.userId,
+    clientId: ident.clientId,
+    name: v.name,
+    phone: v.phone,
+    email: ident.user?.email || null,
+    now,
+  })
+  audit.push('lead.profile.save', { leadKey: ident.leadKey, userId: ident.userId, anon: !ident.userId })
+  return sendJson(req, res, 200, { ok: true, profile: publicLeadProfile(profile) })
+}
+
+async function handleCreateViewingAppointment(req, res) {
+  // POST /api/viewing-appointments
+  // { roomId, name, phone, preferredAt, note?, clientId? }
+  const ip = clientIp(req)
+  const rl = rateHit(`lead:${ip}`, 20, 60 * 60 * 1000)
+  if (!rl.ok) return rateLimited(req, res, rl.retryAfter)
+
+  const body = await readJsonBody(req).catch(() => null)
+  if (!body) return badRequest(req, res, 'JSON không hợp lệ.')
+  const ident = resolveLeadIdentity(req, body)
+  if (!ident) return badRequest(req, res, 'Thiếu định danh khách (clientId).')
+
+  const roomId = String(body.roomId || '').trim()
+  if (!roomId) return badRequest(req, res, 'Thiếu mã phòng.')
+  const room = rooms.findById(roomId)
+  if (!room || room.status === 'hidden' || room.status === 'closed') {
+    return notFound(req, res, 'Phòng không còn hoạt động.')
+  }
+
+  const v = validateLeadContact(body)
+  if (!v.ok) return badRequest(req, res, v.errors.join(' '))
+
+  const preferredAt = String(body.preferredAt || '').trim()
+  if (!preferredAt || preferredAt.length > MAX_PREFERRED_AT) {
+    return badRequest(req, res, 'Vui lòng chọn thời gian xem phòng.')
+  }
+  const note = (typeof body.note === 'string' ? body.note : '').trim()
+  if (note.length > MAX_LEAD_NOTE) return badRequest(req, res, 'Ghi chú quá dài.')
+
+  const now = Date.now()
+  const id = newId('view')
+  let appointment
+  transaction(() => {
+    appointment = viewingAppointments.insert({
+      id,
+      leadKey: ident.leadKey,
+      userId: ident.userId,
+      clientId: ident.clientId,
+      roomId,
+      name: v.name,
+      phone: v.phone,
+      preferredAt,
+      note: note || null,
+      createdAt: now,
+    })
+    leadProfiles.upsert({
+      leadKey: ident.leadKey,
+      userId: ident.userId,
+      clientId: ident.clientId,
+      name: v.name,
+      phone: v.phone,
+      email: ident.user?.email || null,
+      now,
+    })
+  })
+
+  audit.push('lead.viewing.create', {
+    id, leadKey: ident.leadKey, userId: ident.userId, roomId, anon: !ident.userId,
+  })
+
+  // Fire-and-forget Telegram notify. Builder lives in telegram.mjs so the
+  // text shape is unit-testable without spinning up the API server.
+  notifyTelegram(buildViewingAppointmentMessage({
+    room,
+    publicUrl: PUBLIC_URL,
+    name: v.name,
+    phone: v.phone,
+    preferredAt,
+    note,
+    account: formatLeadAccount(ident),
+  }))
+
+  return sendJson(req, res, 201, {
+    ok: true,
+    appointment: publicViewing(appointment),
+    message: 'Tư vấn viên của chúng tôi sẽ sớm liên hệ với bạn.',
+  })
+}
+
+async function handleCreateConsultationRequest(req, res) {
+  // POST /api/consultation-requests
+  // { name, phone, roomId?, note?, clientId? }
+  const ip = clientIp(req)
+  const rl = rateHit(`lead:${ip}`, 20, 60 * 60 * 1000)
+  if (!rl.ok) return rateLimited(req, res, rl.retryAfter)
+
+  const body = await readJsonBody(req).catch(() => null)
+  if (!body) return badRequest(req, res, 'JSON không hợp lệ.')
+  const ident = resolveLeadIdentity(req, body)
+  if (!ident) return badRequest(req, res, 'Thiếu định danh khách (clientId).')
+
+  const v = validateLeadContact(body)
+  if (!v.ok) return badRequest(req, res, v.errors.join(' '))
+
+  let roomId = null
+  let room = null
+  if (typeof body.roomId === 'string' && body.roomId.trim()) {
+    roomId = body.roomId.trim()
+    room = rooms.findById(roomId)
+    if (!room) roomId = null // tolerate a stale reference rather than 404 a consult ticket
+  }
+  const note = (typeof body.note === 'string' ? body.note : '').trim()
+  if (note.length > MAX_LEAD_NOTE) return badRequest(req, res, 'Ghi chú quá dài.')
+
+  const now = Date.now()
+  const id = newId('consult')
+  let ticket
+  transaction(() => {
+    ticket = consultationRequests.insert({
+      id,
+      leadKey: ident.leadKey,
+      userId: ident.userId,
+      clientId: ident.clientId,
+      roomId,
+      name: v.name,
+      phone: v.phone,
+      note: note || null,
+      createdAt: now,
+    })
+    leadProfiles.upsert({
+      leadKey: ident.leadKey,
+      userId: ident.userId,
+      clientId: ident.clientId,
+      name: v.name,
+      phone: v.phone,
+      email: ident.user?.email || null,
+      now,
+    })
+  })
+
+  audit.push('lead.consult.create', {
+    id, leadKey: ident.leadKey, userId: ident.userId, roomId, anon: !ident.userId,
+  })
+
+  notifyTelegram(buildConsultationRequestMessage({
+    room,
+    publicUrl: PUBLIC_URL,
+    name: v.name,
+    phone: v.phone,
+    note,
+    account: formatLeadAccount(ident),
+  }))
+
+  return sendJson(req, res, 201, {
+    ok: true,
+    request: publicConsultation(ticket),
+    message: 'Tư vấn viên của chúng tôi sẽ sớm liên hệ với bạn.',
+  })
+}
+
+async function handleMyLeads(req, res, url) {
+  // GET /api/my-leads[?clientId=…]
+  // Returns the same identity's submissions so the Inbox page can list them.
+  const u = userForRequest(req)
+  let leadKey = null
+  if (u) leadKey = `user:${u.id}`
+  else {
+    const clientId = (url.searchParams.get('clientId') || '').trim()
+    if (clientId && ANON_CLIENT_ID_RE.test(clientId)) leadKey = `anon:${clientId}`
+  }
+  if (!leadKey) {
+    return sendJson(req, res, 200, {
+      ok: true,
+      viewings: [],
+      consultations: [],
+      profile: null,
+    })
+  }
+  const viewings = viewingAppointments.listForLead(leadKey, 100).map(publicViewing)
+  const consultations = consultationRequests.listForLead(leadKey, 100).map(publicConsultation)
+  return sendJson(req, res, 200, {
+    ok: true,
+    viewings,
+    consultations,
+    profile: publicLeadProfile(leadProfiles.findByKey(leadKey)),
+  })
+}
+
 // ---------- routing ----------
 const ROUTES = [
   { method: 'GET',    re: /^\/api\/health\/?$/, fn: (req, res) => handleHealth(req, res) },
@@ -1874,6 +2233,12 @@ const ROUTES = [
   { method: 'GET',    re: /^\/api\/feedbacks\/?$/, fn: (req, res) => handleListFeedbacks(req, res) },
   { method: 'POST',   re: /^\/api\/feedbacks\/?$/, fn: (req, res) => handleCreateFeedback(req, res) },
   { method: 'DELETE', re: /^\/api\/feedbacks\/([\w-]+)\/?$/, fn: (req, res, _u, id) => handleAdminDeleteFeedback(req, res, id) },
+
+  { method: 'GET',    re: /^\/api\/lead-profile\/?$/, fn: (req, res, url) => handleGetLeadProfile(req, res, url) },
+  { method: 'POST',   re: /^\/api\/lead-profile\/?$/, fn: (req, res) => handlePutLeadProfile(req, res) },
+  { method: 'POST',   re: /^\/api\/viewing-appointments\/?$/, fn: (req, res) => handleCreateViewingAppointment(req, res) },
+  { method: 'POST',   re: /^\/api\/consultation-requests\/?$/, fn: (req, res) => handleCreateConsultationRequest(req, res) },
+  { method: 'GET',    re: /^\/api\/my-leads\/?$/, fn: (req, res, url) => handleMyLeads(req, res, url) },
 
   { method: 'GET',    re: /^\/api\/uploads\/config\/?$/, fn: (req, res) => handleUploadConfig(req, res) },
   { method: 'POST',   re: /^\/api\/uploads\/cloudinary-sign\/?$/, fn: (req, res) => handleCloudinarySign(req, res) },

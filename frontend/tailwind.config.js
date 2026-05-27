@@ -6,63 +6,64 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Background tones — warm bone / parchment instead of saturated cream.
+        // Background tones — near-white with a very faint teal tinge.
         cream: {
-          50: '#fbfaf6',
-          100: '#f7f3ea',
-          200: '#ece4d2',
-          300: '#dccfb3',
-          400: '#c4b186',
-          500: '#9a8559',
+          50: '#FAFCFC',
+          100: '#F2F8F8',
+          200: '#E3F0F0',
+          300: '#C6E2E2',
+          400: '#8CBDBD',
+          500: '#5B9797',
         },
-        // Ink — near-black with a warm undertone, replaces washed-out browns.
+        // Ink — neutral cool-gray for text.
         ink: {
-          900: '#15110d',
-          800: '#221b14',
-          700: '#3a2f24',
-          500: '#6a5a4a',
-          400: '#90806f',
+          900: '#111827',
+          800: '#1F2937',
+          700: '#374151',
+          500: '#6B7280',
+          400: '#9CA3AF',
         },
-        // Leaf — deep jade brand. Trust + Hanoi park / banyan tree.
+        // Leaf → teal. Save / match / verified / success accent (#00A6A6).
         leaf: {
-          50: '#ecf6f0',
-          100: '#d2ecdc',
-          200: '#a3d6b8',
-          300: '#5fbf8b',
-          400: '#2da669',
-          500: '#138a4f',
-          600: '#0f6e3f',
-          700: '#0c5631',
+          50: '#E8F8F8',
+          100: '#C0EEEE',
+          200: '#7FD9D9',
+          300: '#3DC3C3',
+          400: '#00AFAF',
+          500: '#00A6A6',
+          600: '#008F8F',
+          700: '#006B6B',
         },
-        // Coral — sunset-over-West-Lake terracotta. Less candy, more clay.
+        // Coral → pink-red. Primary CTA / pass / heart-brand accent (#FF3F5F).
         coral: {
-          50: '#fbeee6',
-          100: '#f5d3bf',
-          200: '#eaa988',
-          300: '#dd7d57',
-          400: '#c45a37',
-          500: '#9d4525',
+          50: '#FFF0F3',
+          100: '#FFD6DE',
+          200: '#FFB0BF',
+          300: '#FF7A95',
+          400: '#FF3F5F',
+          500: '#E93452',
+          600: '#CC1A3A',
         },
-        // Sky — soft window light, used sparingly.
+        // Sky — soft accent, used sparingly.
         sky: {
           50: '#eef6fb',
           100: '#cee2ee',
           200: '#9bc4dc',
         },
-        // New brand alias: identical to leaf-500 / leaf-600 for new components.
+        // Brand alias → coral primary.
         brand: {
-          DEFAULT: '#138a4f',
-          ink: '#0c5631',
+          DEFAULT: '#FF3F5F',
+          ink: '#E93452',
         },
-        // Clay alias for the coral accent — semantic name for "like / heart".
+        // Clay alias → coral (semantic name for like / heart).
         clay: {
-          DEFAULT: '#c45a37',
-          ink: '#9d4525',
+          DEFAULT: '#FF3F5F',
+          ink: '#E93452',
         },
       },
       fontFamily: {
-        sans: ['"Plus Jakarta Sans"', '"Be Vietnam Pro"', 'system-ui', '-apple-system', 'sans-serif'],
-        display: ['"Fraunces"', '"Roboto Serif"', 'Georgia', 'serif'],
+        sans: ['"Baloo 2"', '"Be Vietnam Pro"', 'system-ui', '-apple-system', 'sans-serif'],
+        display: ['"Baloo 2"', '"Be Vietnam Pro"', 'system-ui', '-apple-system', 'sans-serif'],
       },
       boxShadow: {
         // Slightly tighter, lower-spread shadows — feels more "lifted paper",
@@ -70,7 +71,7 @@ export default {
         // the warm parchment background.
         card: '0 18px 48px -28px rgba(21, 17, 13, 0.45), 0 4px 14px -8px rgba(21, 17, 13, 0.18)',
         soft: '0 8px 28px -18px rgba(21, 17, 13, 0.28)',
-        ring: '0 0 0 4px rgba(19, 138, 79, 0.18)',
+        ring: '0 0 0 4px rgba(0, 166, 166, 0.20)',
         stamp: 'inset 0 0 0 2px currentColor, 0 0 0 4px rgba(255,255,255,0.5)',
       },
       borderRadius: {
@@ -116,7 +117,7 @@ export default {
         // Subtle paper grain — replaces three overlapping radial gradients
         // for a quieter, more premium feel. Two soft glows in jade & clay
         // keep the warmth without competing with content.
-        'paper-grain': "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.07 0 0 0 0 0.06 0 0 0 0 0.05 0 0 0 0.04 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")",
+        'paper-grain': "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.04 0 0 0 0 0.07 0 0 0 0 0.07 0 0 0 0.035 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")",
       },
     },
   },

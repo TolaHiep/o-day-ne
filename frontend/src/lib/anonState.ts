@@ -23,6 +23,29 @@ export function clearAnonPasses() {
   try { localStorage.removeItem(PASS_KEY) } catch { /* ignore */ }
 }
 
+// Stable anonymous client identifier used to attach lead submissions
+// (viewing appointments / consultation requests) to a returning anonymous
+// user. We generate it on first read and persist it forever — clearing
+// localStorage resets it, but otherwise the same browser will keep the same
+// lead history across visits.
+const CLIENT_ID_KEY = 'odn.client.id.v1'
+const CLIENT_ID_RE = /^[A-Za-z0-9_-]{8,64}$/
+
+export function getOrCreateClientId(): string {
+  try {
+    const existing = localStorage.getItem(CLIENT_ID_KEY)
+    if (existing && CLIENT_ID_RE.test(existing)) return existing
+  } catch { /* ignore */ }
+  // crypto.randomUUID exists in every browser we ship to; fall back to a
+  // Math.random + Date.now combo just in case the page is loaded in an exotic
+  // environment without it (jsdom under Vitest, old WebViews).
+  const fresh = (typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID().replace(/-/g, '')
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`).slice(0, 48)
+  try { localStorage.setItem(CLIENT_ID_KEY, fresh) } catch { /* ignore */ }
+  return fresh
+}
+
 export function loadFilters<T>(): T | null {
   try {
     const raw = localStorage.getItem(FILTER_KEY)

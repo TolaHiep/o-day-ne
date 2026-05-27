@@ -709,3 +709,140 @@ test('room.images must be https — http URLs are rejected', async () => {
   }, token)
   assert.equal(r.status, 400, 'http:// image URL must be rejected')
 })
+
+test('lead profile: anonymous client can save and re-read their info', async () => {
+  // Use a fresh, well-shaped client id (matches ANON_CLIENT_ID_RE on the
+  // server). Anonymous flow is what the marketing-site visitor uses before
+  // they sign in.
+  const clientId = 'cid-' + crypto.randomBytes(12).toString('hex')
+
+  const empty = await api(`/api/lead-profile?clientId=${clientId}`)
+  assert.equal(empty.status, 200)
+  assert.equal(empty.body.profile, null, 'fresh client has no saved profile')
+
+  const save = await api('/api/lead-profile', {
+    method: 'POST',
+    body: JSON.stringify({ name: 'Anh Khách', phone: '0901 222 333', clientId }),
+  })
+  assert.equal(save.status, 200, JSON.stringify(save.body))
+  assert.equal(save.body.profile.name, 'Anh Khách')
+  assert.equal(save.body.profile.phone, '0901 222 333')
+
+  const got = await api(`/api/lead-profile?clientId=${clientId}`)
+  assert.equal(got.body.profile.name, 'Anh Khách')
+  assert.equal(got.body.source, 'lead')
+})
+
+test('lead profile: requires clientId for anonymous calls', async () => {
+  const noId = await api('/api/lead-profile', {
+    method: 'POST',
+    body: JSON.stringify({ name: 'Khong', phone: '0901 222 333' }),
+  })
+  assert.equal(noId.status, 400)
+})
+
+test('viewing appointment: anonymous create, room-bound, prefills profile', async () => {
+  const list = await api('/api/rooms')
+  const roomId = list.body.rooms[0].id
+  const clientId = 'cid-' + crypto.randomBytes(12).toString('hex')
+
+  const created = await api('/api/viewing-appointments', {
+    method: 'POST',
+    body: JSON.stringify({
+      roomId,
+      name: 'Anh Khách Mới',
+      phone: '0903 111 222',
+      preferredAt: '2026-06-01T18:30',
+      note: 'Đi cùng bạn cùng phòng',
+      clientId,
+    }),
+  })
+  assert.equal(created.status, 201, JSON.stringify(created.body))
+  assert.match(created.body.message, /Tư vấn viên/)
+  assert.equal(created.body.appointment.roomId, roomId)
+  assert.equal(created.body.appointment.status, 'new')
+
+  // Profile was upserted as a side-effect so the next modal opens prefilled.
+  const profile = await api(`/api/lead-profile?clientId=${clientId}`)
+  assert.equal(profile.body.profile.name, 'Anh Khách Mới')
+
+  // /api/my-leads returns the submission for this client.
+  const mine = await api(`/api/my-leads?clientId=${clientId}`)
+  assert.equal(mine.status, 200)
+  assert.equal(mine.body.viewings.length, 1)
+  assert.equal(mine.body.viewings[0].roomId, roomId)
+})
+
+test('viewing appointment: missing or invalid fields rejected', async () => {
+  const list = await api('/api/rooms')
+  const roomId = list.body.rooms[0].id
+  const clientId = 'cid-' + crypto.randomBytes(12).toString('hex')
+
+  const noTime = await api('/api/viewing-appointments', {
+    method: 'POST',
+    body: JSON.stringify({
+      roomId, name: 'Khách', phone: '0903 111 222', preferredAt: '', clientId,
+    }),
+  })
+  assert.equal(noTime.status, 400)
+
+  const badPhone = await api('/api/viewing-appointments', {
+    method: 'POST',
+    body: JSON.stringify({
+      roomId, name: 'Khách', phone: 'abc', preferredAt: '2026-06-01T18:30', clientId,
+    }),
+  })
+  assert.equal(badPhone.status, 400)
+
+  const noRoom = await api('/api/viewing-appointments', {
+    method: 'POST',
+    body: JSON.stringify({
+      roomId: 'room-does-not-exist', name: 'Khách', phone: '0903 111 222',
+      preferredAt: '2026-06-01T18:30', clientId,
+    }),
+  })
+  assert.equal(noRoom.status, 404)
+})
+
+test('consultation request: authenticated user, optional room, surfaces in my-leads', async () => {
+  const login = await api('/api/auth/demo', {
+    method: 'POST', body: JSON.stringify({ provider: 'demo', email: 'lead-consult@odayne.local', name: 'Anh Lead' }),
+  })
+  const token = login.body.token
+
+  const list = await api('/api/rooms')
+  const roomId = list.body.rooms[0].id
+
+  const created = await api('/api/consultation-requests', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: 'Anh Lead Cập Nhật',
+      phone: '0904 555 666',
+      roomId,
+      note: 'Cần phòng dưới 4tr quanh Cầu Giấy',
+    }),
+  }, token)
+  assert.equal(created.status, 201, JSON.stringify(created.body))
+  assert.match(created.body.message, /Tư vấn viên/)
+
+  const mine = await api('/api/my-leads', {}, token)
+  assert.equal(mine.status, 200)
+  assert.equal(mine.body.consultations.length, 1)
+  assert.equal(mine.body.consultations[0].roomId, roomId)
+  // Profile should have been promoted to the values supplied this time —
+  // editing in the modal updates the saved profile.
+  assert.equal(mine.body.profile.name, 'Anh Lead Cập Nhật')
+  assert.equal(mine.body.profile.phone, '0904 555 666')
+})
+
+test('consultation request: works without roomId (general consult)', async () => {
+  const clientId = 'cid-' + crypto.randomBytes(12).toString('hex')
+  const r = await api('/api/consultation-requests', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: 'Khách Chung', phone: '0907 000 999', clientId,
+    }),
+  })
+  assert.equal(r.status, 201, JSON.stringify(r.body))
+  assert.equal(r.body.request.roomId, null)
+})

@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { apiRooms } from '../lib/api'
+import { apiRooms, apiLeads, type ViewingAppointment, type ConsultationRequest } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { GatedScreen } from '../components/GatedScreen'
 import { Icon } from '../components/Icon'
 import { goDiscover, goEdit, goOwner, goPost, goRoom, goSaved } from '../lib/router'
 import type { Room, RoomFilters } from '../types'
-import { loadFilters } from '../lib/anonState'
+import { getOrCreateClientId, loadFilters } from '../lib/anonState'
 import { ROOM_TYPE_LABEL, formatVND, relativeTime } from '../lib/format'
 
 // Last visit timestamps are stored client-side so the feed can highlight
@@ -43,6 +43,8 @@ export function InboxPage() {
   const [recommended, setRecommended] = useState<Room[] | null>(null)
   const [lastVisit, setLastVisit] = useState<number>(0)
   const [error, setError] = useState<string | null>(null)
+  const [viewings, setViewings] = useState<ViewingAppointment[]>([])
+  const [consultations, setConsultations] = useState<ConsultationRequest[]>([])
 
   // Snapshot lastVisit on first mount, then bump after load — that way items
   // landed while user was away stay highlighted for this render but show as
@@ -67,6 +69,18 @@ export function InboxPage() {
     apiRooms.list(f, { excludeSeen: false })
       .then((r) => { if (!cancelled) setRecommended(r.rooms) })
       .catch(() => { if (!cancelled) setRecommended([]) })
+
+    // Lead history (viewing appointments + consultation requests) keyed off
+    // the user id when logged in. We also pass the anonymous clientId so a
+    // user who submitted requests before logging in still sees them after
+    // upgrading to an account.
+    apiLeads.mine(getOrCreateClientId())
+      .then((r) => {
+        if (cancelled) return
+        setViewings(r.viewings || [])
+        setConsultations(r.consultations || [])
+      })
+      .catch(() => { /* ignore — feature optional */ })
 
     // Mark the inbox as visited *after* the network calls settle so a flaky
     // load doesn't bury notifications that didn't actually surface.
@@ -251,6 +265,67 @@ export function InboxPage() {
             </li>
           ))}
         </ul>
+      )}
+
+      {(viewings.length > 0 || consultations.length > 0) && (
+        <section className="space-y-3">
+          <div>
+            <p className="eyebrow inline-flex items-center gap-1.5">
+              <Icon.Phone size={11} className="text-leaf-500" /> Yêu cầu của bạn
+            </p>
+            <h2 className="mt-1 font-display text-xl font-semibold tracking-tight">Lịch hẹn & yêu cầu tư vấn</h2>
+            <p className="text-sm text-ink-500">Các lần bạn để lại liên hệ với tư vấn viên của Ở Đây Nè.</p>
+          </div>
+          {viewings.length > 0 && (
+            <ul className="space-y-2">
+              {viewings.map((v) => (
+                <li key={v.id} className="card-soft flex items-start gap-3 p-4">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-leaf-50 text-leaf-700">
+                    <Icon.Eye size={18} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-display text-base font-semibold text-ink-900">Hẹn xem phòng</p>
+                    <p className="mt-0.5 text-sm text-ink-500">
+                      Thời gian: <span className="text-ink-700">{v.preferredAt}</span>
+                    </p>
+                    <p className="text-sm text-ink-500">
+                      Liên hệ: <span className="text-ink-700">{v.name} · {v.phone}</span>
+                    </p>
+                    {v.note && <p className="mt-1 text-sm text-ink-500">Ghi chú: {v.note}</p>}
+                    <p className="mt-1 text-[11px] text-ink-400">Gửi {relativeTime(v.createdAt)}</p>
+                  </div>
+                  <button onClick={() => goRoom(v.roomId)} className="btn-outline btn-pill shrink-0">
+                    Xem phòng <Icon.ArrowRight size={12} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {consultations.length > 0 && (
+            <ul className="space-y-2">
+              {consultations.map((c) => (
+                <li key={c.id} className="card-soft flex items-start gap-3 p-4">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-coral-50 text-coral-500">
+                    <Icon.Sparkles size={18} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-display text-base font-semibold text-ink-900">Yêu cầu tư vấn</p>
+                    <p className="mt-0.5 text-sm text-ink-500">
+                      Liên hệ: <span className="text-ink-700">{c.name} · {c.phone}</span>
+                    </p>
+                    {c.note && <p className="mt-1 text-sm text-ink-500">{c.note}</p>}
+                    <p className="mt-1 text-[11px] text-ink-400">Gửi {relativeTime(c.createdAt)}</p>
+                  </div>
+                  {c.roomId && (
+                    <button onClick={() => goRoom(c.roomId!)} className="btn-outline btn-pill shrink-0">
+                      Xem phòng <Icon.ArrowRight size={12} />
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       )}
     </div>
   )
